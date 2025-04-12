@@ -46,7 +46,51 @@ pub struct TaskManagerInner {
     /// id of current `Running` task
     current_task: usize,
 }
-
+///count
+#[derive(Clone,Copy)]
+pub struct CountSyscall{
+    syscall_exit:usize,
+    syscall_gettimeofday:usize,
+    syscall_trace:usize,
+    syscall_write:usize,
+    syscall_yield:usize
+}
+impl Default for CountSyscall {
+    ///default
+    fn default() -> Self {
+        Self{
+            syscall_exit: 0,
+            syscall_gettimeofday: 0,
+            syscall_trace: 0,
+            syscall_write: 0,
+            syscall_yield: 0,
+        }
+    }
+}
+impl CountSyscall{
+    ///count
+    pub fn count(&mut self,_id:usize) {
+        match _id {
+            93=>{self.syscall_exit +=1;}
+            169=>{self.syscall_gettimeofday +=1;}
+            410=>{self.syscall_trace+=1;}
+            64=>{self.syscall_write+=1;}
+            124=>{self.syscall_yield+=1;}
+            _=>{}
+        }
+    }
+    ///print
+    pub fn out_conut(&self,_id:usize)->usize{
+        match _id {
+            93=>{self.syscall_exit}
+            169=>{self.syscall_gettimeofday}
+            410=>{self.syscall_trace}
+            64=>{self.syscall_write}
+            124=>{self.syscall_yield}
+            _=>{0}
+        }
+    }
+}
 lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
@@ -54,6 +98,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            count_syscall: CountSyscall::default(),
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +180,21 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    ///print
+    fn count_syscall(&self,_id:usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let count_syscall = &inner.tasks[current].count_syscall;
+        count_syscall.out_conut(_id)
+    }
+    ///++
+    fn add_count_syscall(&self,_id:usize){
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let count_syscall = &mut inner.tasks[current].count_syscall;
+        count_syscall.count(_id)
+    }
+
 }
 
 /// Run the first task in task list.
@@ -156,6 +216,14 @@ fn mark_current_suspended() {
 /// Change the status of current `Running` task into `Exited`.
 fn mark_current_exited() {
     TASK_MANAGER.mark_current_exited();
+}
+///
+pub fn count_syscall(_id:usize) -> usize {
+    TASK_MANAGER.count_syscall(_id)
+}
+///
+pub fn add_count_syscall(_id:usize)  {
+    TASK_MANAGER.add_count_syscall(_id)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
