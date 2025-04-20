@@ -23,6 +23,7 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+use crate::mm::{MapPermission};
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -153,6 +154,49 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    ///get task page table
+    fn get_task_page(&self)->usize{
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let page=inner.tasks[current].memory_set.token();
+        drop(inner);
+        page
+    }
+    ///找当前任务的内存mao中是否包含的这个地址
+    fn find_current_map_existence(&self, start:usize,end:usize, map_permission: MapPermission) -> bool {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let set=&inner.tasks[current].memory_set;
+        set.find_vpn(start,end,map_permission)
+    }
+    ///print
+    fn count_syscall(&self,_id:usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let count_syscall = &inner.tasks[current].count_syscall;
+        count_syscall.out_conut(_id)
+    }
+    ///++
+    fn add_count_syscall(&self,_id:usize){
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let count_syscall = &mut inner.tasks[current].count_syscall;
+        count_syscall.count(_id)
+    }
+    ///添加内存map
+    fn add_mmap(&self,start:usize,len:usize,map_permission: MapPermission)->bool {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let set=&mut inner.tasks[current].memory_set;
+        set.add_new_area(start, len, map_permission)
+    }
+    ///删除内存map
+    fn sub_mmap(&self,start:usize,len:usize)->bool {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let set=&mut inner.tasks[current].memory_set;
+        set.sub_area(start, len)
+    }
 }
 
 /// Run the first task in task list.
@@ -180,6 +224,30 @@ fn mark_current_exited() {
 pub fn suspend_current_and_run_next() {
     mark_current_suspended();
     run_next_task();
+}
+///get task page table
+pub fn get_current_page() -> usize {
+    TASK_MANAGER.get_task_page()
+}
+///找当前任务的内存mao中是否包含的这个地址
+pub fn find_current_map_existence(start:usize,end:usize, map_permission: MapPermission)->bool{
+    TASK_MANAGER.find_current_map_existence(start,end,map_permission)
+}
+/// 返回系统任务计数
+pub fn count_syscall(_id:usize) -> usize {
+    TASK_MANAGER.count_syscall(_id)
+}
+/// 增加任务计数
+pub fn add_count_syscall(_id:usize)  {
+    TASK_MANAGER.add_count_syscall(_id)
+}
+///添加内存区域
+pub fn add_mmap(start:usize,len:usize,map_permission: MapPermission)->bool  {
+    TASK_MANAGER.add_mmap(start, len, map_permission)
+}
+///删除内存区域
+pub fn sub_mmap(start:usize,len:usize)->bool  {
+    TASK_MANAGER.sub_mmap(start, len)
 }
 
 /// Exit the current 'Running' task and run the next task in task list.

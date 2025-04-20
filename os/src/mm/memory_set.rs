@@ -13,6 +13,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
+use riscv::addr::BitField;
 use riscv::register::satp;
 
 extern "C" {
@@ -262,6 +263,79 @@ impl MemorySet {
             false
         }
     }
+    ///找到包含这段虚拟内存的area，找到返回true
+    pub fn find_vpn(&self,start:usize,end:usize,map_permission: MapPermission) -> bool {
+        let start=VirtPageNum::from(start>>12);
+        let end=VirtPageNum::from(end>>12);
+        if start>end{
+            return false;
+        }
+        let vpnr=VPNRange::new(start,end);
+        for area in self
+            .areas
+            .iter()
+            .filter(|area| {area.map_perm.contains(map_permission)})
+        {
+            if area.find_data(vpnr){
+                return true;
+            };
+        }
+        false
+    }
+    ///检查是否有这段虚拟地址
+    pub fn find_addr_err(&self,start:usize,end:usize) -> bool {
+        let start=VirtPageNum::from(start>>12);
+        let end=VirtPageNum::from(end>>12);
+        if start>end{
+            return false;
+        }
+        let vpnr=VPNRange::new(start,end);
+        for area in self
+            .areas
+            .iter()
+        {
+            if area.find_addr_err(vpnr){
+                return true;
+            };
+        }
+        false
+    }
+    ///添加虚拟内存区域，并分配物理内存
+    pub fn add_new_area(&mut self, start:usize, len:usize, map_permission: MapPermission)->bool {
+        let end=start+len;
+        if self.find_addr_err(start,end){
+            return false;
+        };
+        let mut area=MapArea::new(VirtAddr::from(start),VirtAddr::from(end),MapType::Framed,map_permission);
+        area.map(&mut self.page_table);
+        self.areas.push(area);
+        true
+    }
+    ///删除内存
+    pub fn sub_area(&mut self, start:usize, len:usize)->bool{
+        if start<<usize::BIT_LENGTH-12 !=0 || len<<usize::BIT_LENGTH-12 !=0{
+            return false;
+        }
+        let end=VirtAddr::from(start+len);
+        let start=VirtAddr::from(start);
+        let start=start.floor();
+        let end=end.ceil();
+        let mut ii=usize::MAX;
+        for (i,area) in self.areas.iter_mut().enumerate().filter(|(_,area)| {
+            area.vpn_range.get_start().0==start.0 && area.vpn_range.get_end().0==end.0
+        })
+        {
+            ii=i;
+            area.unmap(&mut self.page_table);
+        }
+        if ii==usize::MAX{
+            false
+        }
+        else {
+            self.areas.remove(ii);
+            true 
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -355,6 +429,20 @@ impl MapArea {
             }
             current_vpn.step();
         }
+    }
+    ///找这个内存区域
+    pub fn find_data(&self, vpnrange: VPNRange) ->bool{
+        if self.vpn_range.get_start()<=vpnrange.get_start() && self.vpn_range.get_end()>=vpnrange.get_end() { 
+            return true
+        }
+        false
+    }
+    ///找不在这个内存区域
+    pub fn find_addr_err(&self, vpnrange: VPNRange)->bool{
+        if self.vpn_range.get_end()<=vpnrange.get_start() || self.vpn_range.get_start()>vpnrange.get_end() {
+            return false
+        }
+        true
     }
 }
 

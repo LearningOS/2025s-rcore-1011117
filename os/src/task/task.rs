@@ -5,7 +5,51 @@ use crate::mm::{
     kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
 use crate::trap::{trap_handler, TrapContext};
-
+///count
+#[derive(Clone,Copy)]
+pub struct CountSyscall{
+    syscall_exit:usize,
+    syscall_gettimeofday:usize,
+    syscall_trace:usize,
+    syscall_write:usize,
+    syscall_yield:usize
+}
+impl Default for CountSyscall {
+    ///default
+    fn default() -> Self {
+        Self{
+            syscall_exit: 0,
+            syscall_gettimeofday: 0,
+            syscall_trace: 0,
+            syscall_write: 0,
+            syscall_yield: 0,
+        }
+    }
+}
+impl CountSyscall{
+    ///count
+    pub fn count(&mut self,_id:usize) {
+        match _id {
+            93=>{self.syscall_exit +=1;}
+            169=>{self.syscall_gettimeofday +=1;}
+            410=>{self.syscall_trace+=1;}
+            64=>{self.syscall_write+=1;}
+            124=>{self.syscall_yield+=1;}
+            _=>{}
+        }
+    }
+    ///print
+    pub fn out_conut(&self,_id:usize)->usize{
+        match _id {
+            93=>{self.syscall_exit}
+            169=>{self.syscall_gettimeofday}
+            410=>{self.syscall_trace}
+            64=>{self.syscall_write}
+            124=>{self.syscall_yield}
+            _=>{0}
+        }
+    }
+}
 /// The task control block (TCB) of a task.
 pub struct TaskControlBlock {
     /// Save task context
@@ -28,6 +72,8 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+    ///syscall count
+    pub count_syscall: CountSyscall,
 }
 
 impl TaskControlBlock {
@@ -63,6 +109,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            count_syscall: CountSyscall::default(),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
