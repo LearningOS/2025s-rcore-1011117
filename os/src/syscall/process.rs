@@ -167,6 +167,7 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+    //翻译为物理地址，够着elf的引用
     let current_task = current_task().unwrap();
     let token=current_user_token();
     let ptr=translated_byte_buffer(token,_path,16);
@@ -175,16 +176,20 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         Some(data) => {data}
         None=>{return -1}
     };
+    //新建任务控制块
     let new_task = TaskControlBlock::new(elf);
     let new_task=Arc::new(new_task);
     let new_pid = new_task.pid.0;
+    //将父进程添加到子进程的父进程字段
     let binding = new_task.clone();
     let mut inner=binding.inner_exclusive_access();
     inner.parent = Some(Arc::downgrade(&current_task.clone()));
     drop(inner);
+    //将子进程添加到父进程的子进程字段
     let mut inner=current_task.inner_exclusive_access();
     inner.children.push(new_task.clone());
     drop(inner);
+    //添加任务到 任务队列
     add_task(new_task);
     new_pid as isize
 }
