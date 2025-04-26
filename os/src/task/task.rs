@@ -2,12 +2,13 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
+use core::cmp::Ordering;
 
 /// Task control block structure
 ///
@@ -24,6 +25,25 @@ pub struct TaskControlBlock {
     inner: UPSafeCell<TaskControlBlockInner>,
 }
 
+impl Eq for TaskControlBlock {}
+
+impl PartialEq<Self> for TaskControlBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner_exclusive_access().stride == other.inner_exclusive_access().stride
+    }
+}
+
+impl PartialOrd<Self> for TaskControlBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.inner_exclusive_access().stride.partial_cmp(&other.inner_exclusive_access().stride)
+    }
+}
+
+impl Ord for TaskControlBlock {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.inner_exclusive_access().stride.cmp(&other.inner_exclusive_access().stride)
+    }
+}
 impl TaskControlBlock {
     /// Get the mutable reference of the inner TCB
     pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
@@ -52,8 +72,11 @@ pub struct TaskControlBlockInner {
 
     /// Application address space
     pub memory_set: MemorySet,
-
     /// Parent process of the current process.
+    /// task priority
+    pub task_priority: usize,
+    /// stride
+    pub stride:usize,
     /// Weak will not affect the reference count of the parent
     pub parent: Option<Weak<TaskControlBlock>>,
 
@@ -113,6 +136,8 @@ impl TaskControlBlock {
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
+                    task_priority: 16,
+                    stride:0,
                     parent: None,
                     children: Vec::new(),
                     exit_code: 0,
@@ -186,6 +211,8 @@ impl TaskControlBlock {
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
+                    task_priority: 16,
+                    stride:0,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,
@@ -235,6 +262,26 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+    ///
+    pub fn extend_memory(&self,_start: usize, _len: usize, _port: usize)->bool{
+        let mut inner = self.inner_exclusive_access();
+        if _port>7 || _port==0{
+            return false;
+        }
+        let port=MapPermission::from_bits_truncate((_port<<1) as u8);
+        if inner.memory_set.add_new_mmap(_start,_len,(MapPermission::R|MapPermission::W|MapPermission::X).intersection(port) |MapPermission::U){
+            return true;
+        }
+        false
+    }
+    ///
+    pub fn sub_memory(&self,_start: usize, _len: usize)->bool{
+        let mut inner = self.inner_exclusive_access();
+        if inner.memory_set.sub_mmap(_start, _len){
+            return true;
+        }
+        false
     }
 }
 
