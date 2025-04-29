@@ -10,6 +10,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
+use riscv::addr::BitField;
 use riscv::register::satp;
 
 extern "C" {
@@ -318,6 +319,60 @@ impl MemorySet {
             false
         }
     }
+    ///检查是否有这段虚拟地址
+    pub fn find_addr_err(&self,start:VirtPageNum,end:VirtPageNum) -> bool {
+        let vpnr=VPNRange::new(start,end);
+        for area in self
+            .areas
+            .iter()
+        {
+            if area.find_addr_err(vpnr){
+                return true;
+            };
+        }
+        false
+    }
+    ///添加新的内存区域
+    pub fn add_new_mmap(&mut self, start: usize, len: usize, map_permission: MapPermission) ->bool{
+        if start<<usize::BIT_LENGTH-12 !=0{
+            return false;
+        }
+        let end_va=VirtAddr::from(start+len);
+        let start_va=VirtAddr::from(start);
+        let start=start_va.floor();
+        let end=end_va.ceil();
+        if self.find_addr_err(start,end){
+            return false;
+        };
+        self.insert_framed_area(start_va,end_va,map_permission);
+        true
+
+    }
+    ///删除内存
+    pub fn sub_mmap(&mut self, start:usize, len:usize)->bool{
+        if start<<usize::BIT_LENGTH-12 !=0{
+            return false;
+        }
+        let end=VirtAddr::from(start+len);
+        let start=VirtAddr::from(start);
+        let start=start.floor();
+        let end=end.ceil();
+        let mut ii=usize::MAX;
+        for (i,area) in self.areas.iter_mut().enumerate().filter(|(_,area)| {
+            area.vpn_range.get_start().0==start.0 && area.vpn_range.get_end().0==end.0
+        })
+        {
+            ii=i;
+            area.unmap(&mut self.page_table);
+        }
+        if ii==usize::MAX{
+            false
+        }
+        else {
+            self.areas.remove(ii);
+            true
+        }
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -417,6 +472,12 @@ impl MapArea {
             }
             current_vpn.step();
         }
+    }
+    pub fn find_addr_err(&self, vpnrange: VPNRange)->bool{
+        if self.vpn_range.get_end()<=vpnrange.get_start() || self.vpn_range.get_start()>=vpnrange.get_end() {
+            return false
+        }
+        true
     }
 }
 

@@ -183,4 +183,87 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+    ///返回inode_id
+    pub fn inode_id(&self)->u32{
+        self.fs.lock().get_disk_inide_id(self.block_id as u32, self.block_offset as u32)
+    }
+    ///文件的类型
+    pub fn file_type(&self)->u32{
+        let d=self.read_disk_inode(|disk_inode| {
+            disk_inode.is_dir()
+        });
+        match d {
+            true=>{0o040000}
+            false=>{0o100000}
+        }
+    }
+    ///文件硬链接的数量
+    pub fn file_linkat(&self)->u32{
+        self.read_disk_inode(|disk_inode| {
+            disk_inode.linkat
+        })
+    }
+    ///链接文件
+    pub fn linkat(&self, old_name: &str, new_name: &str, _flags: u32)->bool{
+        if let Some(old)=self.find(old_name){
+            if let Some(new)=self.find(new_name){
+                return false
+            }
+            else {
+                let inode=old.inode_id();
+                let mut fs = self.fs.lock();
+                self.modify_disk_inode(|root_inode| {
+                    // append file in the dirent
+                    let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                    let new_size = (file_count + 1) * DIRENT_SZ;
+                    // increase size
+                    self.increase_size(new_size as u32, root_inode, &mut fs);
+                    // write dirent
+                    let dirent = DirEntry::new(new_name, inode);
+                    root_inode.write_at(
+                        file_count * DIRENT_SZ,
+                        dirent.as_bytes(),
+                        &self.block_device,
+                    );
+                });
+                old.modify_disk_inode(|root_inode| {
+                    root_inode.linkat+=1;
+                });
+                return true
+            }
+        }
+        false
+    }
+    ///取消链接文件
+    pub fn unlinkat(&self, name: &str)->bool{
+        if let Some(inode)=self.find(name) {
+            self.modify_disk_inode(|disk_inode| {
+                if disk_inode.is_dir(){
+                    let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+                    for i in 0..file_count {
+                        let mut dirent = DirEntry::empty();
+                        assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                    );
+                        if dirent.name().contains(name) {
+                            inode.modify_disk_inode(|root_inode| {
+                                root_inode.linkat-=1;
+                            });
+                            let mut dirent = DirEntry::empty();
+                            disk_inode.write_at(i * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
+                            return true;
+                        }
+                    }
+                    false
+                }
+                else {
+                    false
+                }
+            })
+        }
+        else {
+            false
+        }
+    }
 }
