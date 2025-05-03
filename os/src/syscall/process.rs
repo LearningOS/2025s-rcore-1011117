@@ -7,6 +7,7 @@ use crate::{
     },
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
+use crate::timer::get_time;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -152,11 +153,19 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+    let current_task = current_task().unwrap();
     trace!(
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().process.upgrade().unwrap().getpid()
+        current_task.process.upgrade().unwrap().getpid()
     );
-    -1
+    let time=get_time();
+    let value = translated_refmut(current_task.get_user_token(),_ts);
+
+    *value = TimeVal {
+        sec: time / 1_000_000,
+        usec: time % 1_000_000,
+    };
+    0
 }
 
 /// mmap syscall

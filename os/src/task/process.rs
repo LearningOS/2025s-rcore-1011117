@@ -13,7 +13,47 @@ use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
-use core::cell::RefMut;
+use core::cell::{RefMut};
+///Resource vector
+#[derive(Debug)]
+pub struct ResourceVector{
+    pub mutex:Vec<usize>,
+    pub semaphore:Vec<usize>,
+}
+impl ResourceVector{
+    pub fn cmp(&self,other:&ResourceVector)->bool{
+        let mut flag=true;
+        for i in 0..self.mutex.len(){
+            flag = other.mutex.get(i).unwrap_or(&0)>=&self.mutex[i];
+        }
+        for i in 0..other.semaphore.len(){
+            flag = other.semaphore.get(i).unwrap_or(&0)>=&self.semaphore[i];
+        }
+        flag
+    }
+    pub fn new(mutex_len:usize, semaphore_len:usize) -> ResourceVector{
+        let mut mutex=Vec::new();
+        let mut semaphore=Vec::new();
+        for _ in 0..mutex_len{
+            mutex.push(0);
+        }
+        for _ in 0..semaphore_len{
+            semaphore.push(0);
+        }
+        ResourceVector{
+            mutex,
+            semaphore,
+        }
+    }
+}
+impl Default for ResourceVector{
+    fn default() -> Self {
+        Self{
+            mutex: vec![],
+            semaphore: vec![],
+        }
+    }
+}
 
 /// Process Control Block
 pub struct ProcessControlBlock {
@@ -46,9 +86,17 @@ pub struct ProcessControlBlockInner {
     /// mutex list
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     /// semaphore list
-    pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
+    pub(crate) semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// deadlock_detect
+    pub deadlock_detect:bool,
+    ///Available
+    pub available: ResourceVector,
+    ///Allocation
+    pub allocation:Vec<ResourceVector>,
+    ///Need
+    pub need:Vec<ResourceVector>,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +129,22 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+    ///Banker's Algorithm
+    pub fn bankers_algorithm(&self) ->Option<Arc<TaskControlBlock>>{
+        for (i,t) in self.need.iter().enumerate(){
+            if t.cmp(&self.available){
+                return self.tasks[i].clone()
+            }
+        }
+        None
+    }
+    ///
+    pub fn add_tid_resource(&mut self, tid:usize){
+        let mu=self.allocation[0].mutex.len();
+        let se=self.allocation[0].semaphore.len();
+        self.allocation.insert(tid,ResourceVector::new(mu,se));
+        self.need.insert(tid,ResourceVector::new(mu,se));
     }
 }
 
@@ -119,6 +183,10 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect: false,
+                    available: ResourceVector { mutex: vec![], semaphore: vec![] },
+                    allocation: vec![ResourceVector::default()],
+                    need: vec![ResourceVector::default()],
                 })
             },
         });
@@ -245,6 +313,10 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect:false,
+                    available: ResourceVector { mutex: vec![], semaphore: vec![] },
+                    allocation: vec![ResourceVector::default()],
+                    need: vec![ResourceVector::default()],
                 })
             },
         });

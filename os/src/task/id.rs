@@ -127,6 +127,7 @@ impl KernelStack {
 }
 
 /// User Resource for a task
+#[derive(Clone)]
 pub struct TaskUserRes {
     /// task id
     pub tid: usize,
