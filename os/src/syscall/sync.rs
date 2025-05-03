@@ -219,6 +219,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             return -0xDEAD;
         }
     }
+    
     drop(process_inner);
     sem.down();
     0
