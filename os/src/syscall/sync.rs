@@ -214,7 +214,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
             process_inner.available.semaphore[sem_id]-=1;
             process_inner.allocation[tid].semaphore[sem_id]+=1;
             process_inner.need[tid].semaphore[sem_id]-=1;
-            println!("deadlock_detect end{}  ? {}",process_inner.available.semaphore[sem_id],tid);
+            println!("deadlock_detect {}  ? {}",process_inner.available.semaphore[sem_id],tid);
         }
         else{
             process_inner.need[tid].semaphore[sem_id]-=1;
