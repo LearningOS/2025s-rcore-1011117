@@ -47,9 +47,11 @@ impl Semaphore {
         trace!("kernel: Semaphore::down");
         let mut inner = self.inner.exclusive_access();
         inner.count -= 1;
+        println!("kkbh  {}",inner.count);
         if inner.count < 0 {
             inner.wait_queue.push_back(current_task().unwrap());
             drop(inner);
+            println!("pushd");
             block_current_and_run_next();
         }
     }

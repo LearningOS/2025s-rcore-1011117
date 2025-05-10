@@ -160,7 +160,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
             .push(Some(Arc::new(Semaphore::new(res_count))));
         process_inner.semaphore_list.len() - 1
     };
-    process_inner.available.semaphore.insert(id,0);
+    process_inner.available.semaphore.insert(id,res_count);
     for t in process_inner.allocation.as_mut_slice() {
         t.semaphore.insert(id as usize,0);
     }
@@ -208,13 +208,16 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     let mut process_inner = process.inner_exclusive_access();
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     if process_inner.deadlock_detect{
+        println!("deadlock_detect kk{}  ? {}",process_inner.available.semaphore[sem_id],tid);
         process_inner.need[tid].semaphore[sem_id]+=1;
         if process_inner.bankers_algorithm().is_some(){
             process_inner.available.semaphore[sem_id]-=1;
             process_inner.allocation[tid].semaphore[sem_id]+=1;
             process_inner.need[tid].semaphore[sem_id]-=1;
+            println!("deadlock_detect end{}  ? {}",process_inner.available.semaphore[sem_id],tid);
         }
         else{
+            process_inner.need[tid].semaphore[sem_id]-=1;
             drop(process_inner);
             return -0xDEAD;
         }

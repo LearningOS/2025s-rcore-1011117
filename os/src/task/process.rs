@@ -14,6 +14,7 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::{RefMut};
+
 ///Resource vector
 #[derive(Debug)]
 pub struct ResourceVector{
@@ -22,14 +23,17 @@ pub struct ResourceVector{
 }
 impl ResourceVector{
     pub fn cmp(&self,other:&ResourceVector)->bool{
-        let mut flag=true;
         for i in 0..self.mutex.len(){
-            flag = other.mutex.get(i).unwrap_or(&0)>=&self.mutex[i];
-        }
+            if other.mutex.get(i).unwrap_or(&0)<&self.mutex[i]{
+                return false;
+            };
+        };
         for i in 0..other.semaphore.len(){
-            flag = other.semaphore.get(i).unwrap_or(&0)>=&self.semaphore[i];
-        }
-        flag
+            if other.semaphore.get(i).unwrap_or(&0)<&self.semaphore[i]{
+                return false;
+            };
+        };
+        true
     }
     pub fn new(mutex_len:usize, semaphore_len:usize) -> ResourceVector{
         let mut mutex=Vec::new();
@@ -132,12 +136,19 @@ impl ProcessControlBlockInner {
     }
     ///Banker's Algorithm
     pub fn bankers_algorithm(&self) ->Option<Arc<TaskControlBlock>>{
+        let mut task:Option<Arc<TaskControlBlock>>=None;
         for (i,t) in self.need.iter().enumerate(){
+            println!("ba av{:?}  ne {:?}",&self.available ,t);
             if t.cmp(&self.available){
-                return self.tasks[i].clone()
+                if task.is_none(){
+                    task =self.tasks[i].clone();
+                }
+            }
+            else { 
+                return None
             }
         }
-        None
+        task
     }
     ///
     pub fn add_tid_resource(&mut self, tid:usize){
