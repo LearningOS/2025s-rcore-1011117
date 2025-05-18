@@ -211,16 +211,19 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
         println!("deadlock_detect kk{}  ? {}",process_inner.available.semaphore[sem_id],tid);
         process_inner.need[tid].semaphore[sem_id]+=1;
         if process_inner.bankers_algorithm().is_some(){
-            process_inner.available.semaphore[sem_id]-=1;
-            process_inner.allocation[tid].semaphore[sem_id]+=1;
-            process_inner.need[tid].semaphore[sem_id]-=1;
-            println!("deadlock_detect {}  ? {}",process_inner.available.semaphore[sem_id],tid);
         }
         else{
+            println!("dddddddddddddddddddd!!!!!!!!!!!");
             process_inner.need[tid].semaphore[sem_id]-=1;
             drop(process_inner);
-            return -0xDEAD;
+            return -0xdead;
         }
+    }
+    if sem.inner.exclusive_access().count>0{
+        process_inner.available.semaphore[sem_id]-=1;
+        process_inner.allocation[tid].semaphore[sem_id]+=1;
+        process_inner.need[tid].semaphore[sem_id]-=1;
+        println!("deadlock_detect {}  ? {}",process_inner.available.semaphore[sem_id],tid);
     }
     drop(process_inner);
     sem.down();

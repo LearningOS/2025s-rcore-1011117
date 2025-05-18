@@ -16,12 +16,20 @@ use alloc::vec::Vec;
 use core::cell::{RefMut};
 
 ///Resource vector
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct ResourceVector{
     pub mutex:Vec<usize>,
     pub semaphore:Vec<usize>,
 }
 impl ResourceVector{
+    pub fn recycle(&mut self,other:&ResourceVector){
+        for i in 0..self.mutex.len(){
+            self.mutex[i] += other.mutex[i];
+        };
+        for i in 0..other.semaphore.len(){
+            self.semaphore[i] += other.semaphore[i];
+        };
+    }
     pub fn cmp(&self,other:&ResourceVector)->bool{
         for i in 0..self.mutex.len(){
             if other.mutex.get(i).unwrap_or(&0)<&self.mutex[i]{
@@ -136,19 +144,30 @@ impl ProcessControlBlockInner {
     }
     ///Banker's Algorithm
     pub fn bankers_algorithm(&self) ->Option<Arc<TaskControlBlock>>{
-        let mut task:Option<Arc<TaskControlBlock>>=None;
-        for (i,t) in self.need.iter().enumerate(){
-            println!("ba av{:?}  ne {:?}",&self.available ,t);
-            if t.cmp(&self.available){
-                if task.is_none(){
-                    task =self.tasks[i].clone();
-                }
+        let mut vec: Vec<usize>=(0..self.need.len()).collect();
+        let mut queue=alloc::collections::VecDeque::new();
+        let mut available=self.available.clone();
+        for l in 0..self.need.len(){
+            for i in vec.iter(){
+                println!("{:?} qqqq {:?}",self.need[i.clone()],&available);
+                if self.need[i.clone()].cmp(&available){
+                    queue.push_back(i.clone());
+                    available.recycle(&self.allocation[i.clone()]);
+                    break;
+                };
             }
-            else { 
-                return None
+            println!("{:?} !!!!!!! {:?}",queue,available);
+            if queue.len()==l{
+                println!("sbbbbbbb1");
+                return None;
             }
+            vec.retain(|a|{a!= queue.back().unwrap_or(&0) });
+        };
+        if self.need.len()!=queue.len(){
+            println!("sbbbbbbb2");
+            return None;
         }
-        task
+        self.tasks[*queue.front().unwrap()].clone()
     }
     ///
     pub fn add_tid_resource(&mut self, tid:usize){

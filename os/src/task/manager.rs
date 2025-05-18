@@ -7,7 +7,6 @@ use super::{ProcessControlBlock, TaskControlBlock, TaskStatus};
 use crate::sync::UPSafeCell;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
@@ -32,9 +31,7 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        println!("dd{:?}",self.ready_queue.iter().map(|x| {x.inner_exclusive_access().res.as_ref().unwrap().tid}).collect::<Vec<_>>());
         while let Some(task)=self.ready_queue.pop_front(){
-            println!("task sta{:?}",task.inner_exclusive_access().task_status);
             if task.inner_exclusive_access().task_status == TaskStatus::Ready{
                 return Some(task);
             }
